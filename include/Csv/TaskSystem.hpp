@@ -3,12 +3,14 @@
 #include <algorithm>
 #include <atomic>
 #include <iostream>
+#include <mutex>
 #include <thread>
 #include <unordered_map>
 #include <vector>
 
 namespace cl {
 namespace csv {
+using Lock = std::unique_lock<std::mutex>;
 class TaskSystem {
   friend class Reader;
   const unsigned count;
@@ -16,6 +18,7 @@ class TaskSystem {
   std::vector<NotificationQueue> queues{count};
   std::atomic<unsigned> index{0};
   std::atomic_bool noMoreTasks{false};
+  std::mutex rowsMutex;
   std::unordered_map<unsigned, std::string> rows;
 
   void Run(unsigned i) {
@@ -33,7 +36,10 @@ class TaskSystem {
         }
       }
 
-      rows.insert(op.value());
+      {
+        auto lock = Lock{this->rowsMutex};
+        rows.insert(op.value());
+      }
       std::cout << "Received row: " << op.value().first << " "
                 << op.value().second << "\n";
     }

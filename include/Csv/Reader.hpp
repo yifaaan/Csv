@@ -25,7 +25,7 @@ public:
       if (!buf)
         return;
       if (this->header.empty()) {
-        header = ReadCsvRow(std::string(buf, length));
+        header = TokenizeRow(std::string(buf, length));
         // in-place RTrim the last header
         RTrim(this->header[this->header.size() - 1]);
         // for (const auto& h : header) {
@@ -127,7 +127,7 @@ public:
     QuotedQuote
   };
 
-  std::vector<std::string> ReadCsvRow(const std::string& row) {
+  std::vector<std::string> TokenizeRow(const std::string& row) {
     auto state = CSVState::UnquotedField;
     auto fields = std::vector<std::string>{""};
     // index of current field
@@ -183,9 +183,9 @@ public:
 
   std::optional<std::unordered_map<std::string_view, std::string>>
   operator[](size_t index) {
-    if (auto it = this->taskSystem.rows.find(index);
+    if (auto it = this->taskSystem.rows.find(index + 1);
         it != this->taskSystem.rows.end()) {
-      auto row = ReadCsvRow(it->second);
+      auto row = TokenizeRow(it->second);
       std::unordered_map<std::string_view, std::string> result;
       for (size_t i = 0; i < this->header.size(); i++) {
         if (i < row.size())
