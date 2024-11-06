@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <atomic>
 #include <iostream>
-#include <ranges>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -11,6 +10,7 @@
 namespace cl {
 namespace csv {
 class TaskSystem {
+  friend class Reader;
   const unsigned count;
   std::vector<std::thread> threads;
   std::vector<NotificationQueue> queues{count};
