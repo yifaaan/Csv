@@ -5,12 +5,12 @@
 #include <optional>
 #include <functional>
 #include <utility>
+#include "ConcurrentQueue.h"
 
 namespace cl
 {
 	namespace csv
 	{
-		using LockType = std::unique_lock<std::mutex>;
 		/// <summary>
 		/// Ò»ÐÐ¼ÇÂ¼
 		/// </summary>
@@ -18,72 +18,20 @@ namespace cl
 
 		class NotificationQueue
 		{
-			std::deque<RecordType> queue;
-			bool done{ false };
-			std::mutex mutex;
-			std::condition_variable ready;
+			moodycamel::ConcurrentQueue<RecordType> queue;
+			moodycamel::ProducerToken pToken{ queue };
+			moodycamel::ConsumerToken cToken{ queue };
 
 		public:
-			bool TryPop(std::optional<RecordType>& op)
+			bool TryDequeue(std::optional<RecordType>& op)
 			{
-				auto lock = LockType{ this->mutex, std::try_to_lock };
-				if (!lock || this->queue.empty())
-				{
-					return false;
-				}
-				op = std::move(queue.front());
-				queue.pop_front();
-				return true;
+				return this->queue.try_dequeue(this->cToken, op);
 			}
 
-			template<typename Fn>
-			bool TryPush(Fn&& fn)
+			template<typename Record>
+			bool Enqueue(Record&& record)
 			{
-				{
-					auto lock = LockType{ this->mutex, std::try_to_lock };
-					if (!lock)
-					{
-						return false;
-					}
-					this->queue.emplace_back(std::forward<Fn>(fn));
-				}
-				this->ready.notify_one();
-				return true;
-			}
-
-			void Done()
-			{
-				{
-					auto lock = LockType{ this->mutex };
-					this->done = true;
-				}
-				this->ready.notify_all();
-			}
-
-			bool Pop(RecordType& op)
-			{
-				auto lock = LockType{ this->mutex };
-				this->ready.wait(lock, [this]()
-				{
-						return !this->queue.empty();
-				});
-				if (this->queue.empty())
-				{
-					return false;
-				}
-				op = std::move(this->queue.front());
-				this->queue.pop_front();
-				return true;
-			}
-
-			template<typename Fn>
-			void Push(Fn&& fn)
-			{
-				{
-					auto lock = LockType{ this->mutex };
-					this->queue.emplace_back(std::function<Fn>(fn));
-				}
-				this->ready.notify_one();
+				return this->queue.enqueue(this->pToken, std::forward<Record>(record));
 			}
 		};
 	}

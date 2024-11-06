@@ -14,14 +14,11 @@ namespace cl
 	{
 		class TaskSystem
 		{
-			const unsigned count{ std::thread::hardware_concurrency() };
+			const unsigned count;
 			std::vector<std::thread> threads;
 			std::vector<NotificationQueue> queues{ count };
 			std::atomic<unsigned> index{ 0 };
-			std::atomic_bool done{ false };
-			std::mutex queueMutex;
-			std::condition_variable ready;
-			std::mutex rowsMutex;
+			std::atomic_bool noMoreTasks{ false };
 			std::unordered_map<unsigned, std::string> rows;
 
 			/// <summary>
@@ -35,11 +32,11 @@ namespace cl
 					auto op = std::optional<RecordType>{};
 					for (unsigned n = 0; n != this->count; n++)
 					{
-						if (this->queues[(i + n) % count].TryPop(op)) break;
+						if (this->queues[(i + n) % count].TryDequeue(op)) break;
 					}
-					if (!op && !this->queues[i].TryPop(op))
+					if (!op && !this->queues[i].TryDequeue(op))
 					{
-						if (this->done)
+						if (this->noMoreTasks)
 						{
 							break;
 						}
@@ -48,11 +45,8 @@ namespace cl
 							continue;
 						}
 					}
-					// Use RecordType op
-					{
-						auto lock = LockType{ this->rowsMutex };
-						rows.insert(op.value());
-					}
+
+					rows.insert(op.value());
 					std::cout << "Received row: " << op.value().first << " " << op.value().second << "\n";
 				}
 			}
@@ -61,20 +55,14 @@ namespace cl
 			explicit TaskSystem(const unsigned _count = std::thread::hardware_concurrency())
 				: count(_count)
 			{
-				std::cout << this->count << '\n';
 			}
 
 			~TaskSystem()
 			{
-				std::ranges::for_each(this->queues, [](auto& queue)
-				{
-					queue.Done();
-				});
 				std::ranges::for_each(this->threads, [](auto& thread)
 				{
 					thread.join();
 				});
-				std::cout << this->rows.size() << std::endl;
 			}
 
 			void Start()
@@ -88,24 +76,22 @@ namespace cl
 			void Stop()
 			{
 				std::cout << "Task system stopped\n";
-				this->done = true;
+				this->noMoreTasks = true;
 			}
 
 			template<typename Fn>
 			void Async(Fn&& fn)
 			{
-				while (!this->done)
+				const auto i = this->index++;
+				for (unsigned n = 0; n != this->count; n++)
 				{
-					auto i = this->index++;
-					for (unsigned n = 0; n != this->count; n++)
+					if(this->queues[(i + n) % this->count].Enqueue(std::forward<Fn>(fn)))
 					{
-						if (this->queues[i % this->count].TryPush(std::forward<Fn>(fn)))
-						{
-							return;
-						}
-						this->index = 0;
+						return;
 					}
+					
 				}
+				this->queues[i % this->count].Enqueue(std::forward<Fn>(fn));
 			}
 		};
 	}
