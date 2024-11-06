@@ -1,38 +1,32 @@
 #pragma once
+#include "ConcurrentQueue.h"
 #include <condition_variable>
 #include <deque>
-#include <string>
-#include <optional>
 #include <functional>
+#include <optional>
+#include <string>
 #include <utility>
-#include "ConcurrentQueue.h"
 
-namespace cl
-{
-	namespace csv
-	{
-		/// <summary>
-		/// 一行记录
-		/// </summary>
-		using RecordType = std::pair<unsigned, std::string>;
+namespace cl {
+namespace csv {
+/// <summary>
+/// 一锟叫硷拷录
+/// </summary>
+using RecordType = std::pair<unsigned, std::string>;
 
-		class NotificationQueue
-		{
-			moodycamel::ConcurrentQueue<RecordType> queue;
-			moodycamel::ProducerToken pToken{ queue };
-			moodycamel::ConsumerToken cToken{ queue };
+class NotificationQueue {
+  moodycamel::ConcurrentQueue<RecordType> queue;
+  moodycamel::ProducerToken pToken{queue};
+  moodycamel::ConsumerToken cToken{queue};
 
-		public:
-			bool TryDequeue(std::optional<RecordType>& op)
-			{
-				return this->queue.try_dequeue(this->cToken, op);
-			}
+public:
+  bool TryDequeue(std::optional<RecordType>& op) {
+    return this->queue.try_dequeue(this->cToken, op);
+  }
 
-			template<typename Record>
-			bool Enqueue(Record&& record)
-			{
-				return this->queue.enqueue(this->pToken, std::forward<Record>(record));
-			}
-		};
-	}
-}
+  template <typename Record> bool Enqueue(Record&& record) {
+    return this->queue.enqueue(this->pToken, std::forward<Record>(record));
+  }
+};
+} // namespace csv
+} // namespace cl
