@@ -18,10 +18,6 @@ class TaskSystem {
   std::atomic_bool noMoreTasks{false};
   std::unordered_map<unsigned, std::string> rows;
 
-  /// <summary>
-  /// ÿ���̶߳���ִ�иò���
-  /// </summary>
-  /// <param name="i">�̱߳��</param>
   void Run(unsigned i) {
     while (true) {
       auto op = std::optional<RecordType>{};
