@@ -65,6 +65,16 @@ public:
     this->noMoreTasks = true;
   }
 
+  auto FindRow(size_t index) {
+    auto lock = Lock{this->rowsMutex};
+    return this->rows.find(index);
+  }
+
+  size_t Rows() {
+    auto lock = Lock{this->rowsMutex};
+    return this->rows.size();
+  }
+
   template <typename Fn> void Async(Fn&& fn) {
     const auto i = this->index++;
     for (unsigned n = 0; n != this->count; n++) {

@@ -11,13 +11,37 @@
 namespace cl {
 namespace csv {
 class Reader {
-  friend class iterator;
+  char delimiter{','};
   TaskSystem taskSystem{1};
   std::vector<std::string> header;
   size_t currentRow{0};
 
+  std::optional<std::unordered_map<std::string_view, std::string>>
+  TryReadRow(size_t index) {
+    if (const auto it = this->taskSystem.FindRow(index);
+        it != this->taskSystem.rows.end()) {
+      const auto row = TokenizeRow(it->second);
+      std::unordered_map<std::string_view, std::string> result;
+      for (size_t i = 0; i < this->header.size(); i++) {
+        if (i < row.size())
+          result.emplace(this->header[i], row[i]);
+        else
+          result.emplace(this->header[i], "");
+      }
+      {
+        const size_t i = this->header.size() - 1;
+        if (i < row.size())
+          result.emplace(this->header[i], RTrimCopy(row[i]));
+        else
+          result.emplace(this->header[i], "");
+      }
+      return result;
+    }
+    return std::nullopt;
+  }
+
 public:
-  explicit Reader(std::string filename) {
+  Reader(std::string filename, char d = ',') : delimiter(d) {
     taskSystem.Start();
     auto file = std::ifstream{std::move(filename)};
     unsigned lineNo = 1;
@@ -135,18 +159,13 @@ public:
     for (char c : row) {
       switch (state) {
       case CSVState::UnquotedField:
-        switch (c) {
-        case ',': // end of field
-          // generate a new field
-          fields.emplace_back("");
+        if (c == this->delimiter) {
+          fields.push_back("");
           i++;
-          break;
-        case '"':
+        } else if (c == '"') {
           state = CSVState::QuotedField;
-          break;
-        default:
+        } else {
           fields[i].push_back(c);
-          break;
         }
         break;
       case CSVState::QuotedField:
@@ -161,48 +180,43 @@ public:
         break;
       case CSVState::QuotedQuote:
         switch (c) {
-        case ',':
-          fields.emplace_back("");
-          i++;
-          state = CSVState::UnquotedField;
-          break;
-        case '"':
-          // 转译双引号
-          fields[i].push_back('"');
-          state = CSVState::QuotedField;
-          break;
-        default:
-          state = CSVState::UnquotedField;
+          if (c == this->delimiter) {
+            fields.push_back("");
+            i++;
+            state = CSVState::UnquotedField;
+          } else if (c == '"') {
+            fields[i].push_back('"');
+            state = CSVState::QuotedField;
+          } else {
+            state = CSVState::UnquotedField;
+          }
           break;
         }
-        break;
       }
     }
     return fields;
   }
 
-  std::optional<std::unordered_map<std::string_view, std::string>>
-  operator[](size_t index) {
-    if (auto it = this->taskSystem.rows.find(index + 1);
-        it != this->taskSystem.rows.end()) {
-      auto row = TokenizeRow(it->second);
-      std::unordered_map<std::string_view, std::string> result;
-      for (size_t i = 0; i < this->header.size(); i++) {
-        if (i < row.size())
-          result.emplace(this->header[i], row[i]);
-        else
-          result.emplace(this->header[i], "");
-      }
-      {
-        const size_t i = this->header.size() - 1;
-        if (i < row.size())
-          result.emplace(this->header[i], RTrimCopy(row[i]));
-        else
-          result.emplace(this->header[i], "");
-      }
-      return result;
-    }
-    return std::nullopt;
+  bool ReadRow(std::unordered_map<std::string_view, std::string>& result) {
+    if (this->currentRow == this->taskSystem.rows.size())
+      return false;
+    auto row = std::optional<std::remove_reference_t<decltype(result)>>{};
+    do {
+      row = TryReadRow(this->currentRow);
+    } while (!row);
+    this->currentRow++;
+    result = row.value();
+    return true;
+  }
+
+  size_t Rows() { return this->taskSystem.Rows(); }
+
+  size_t Cols() const { return this->header.size(); }
+
+  auto Header() const {
+    auto result =
+        std::vector<std::string_view>{this->header.begin(), this->header.end()};
+    return result;
   }
 };
 } // namespace csv
